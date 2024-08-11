@@ -1,18 +1,18 @@
-use std::fmt; 
+use std::fmt;
 
+#[derive(PartialEq, Debug)]
 pub enum Token {
     Symbol(String), // foo-bar
-    Num(f64), // 123.4
-    LParen, // (
-    RParen,  // )
+    Num(f64),       // 123.4
+    LParen,         // (
+    RParen,         // )
 }
 
 impl Token {
-    fn symbol(s: &str) -> Self {
-        Token::Symbol(s.to_string())
+    pub fn symbol(s: impl Into<String>) -> Self {
+        Token::Symbol(s.into())
     }
 }
-
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
