@@ -1,5 +1,6 @@
 use crate::token::Token;
 
+// TODO Result型返すようにしたい
 pub fn lex(input: &str) -> Vec<Token> {
     // inputを先頭から順に読み、
     // * ( が来たら LParen を
@@ -14,11 +15,11 @@ pub fn lex(input: &str) -> Vec<Token> {
         tokens.push(match it.next() {
             Some('(') => Token::LParen,
             Some(')') => Token::RParen,
-            Some(head @ ('a'..='z' | 'A'..='Z' | '-' | '_')) => {
+            Some(head @ ('a'..='z' | 'A'..='Z' | '-' | '_' | '+' | '*' | '/')) => {
                 let mut tmp = head.to_string();
                 while it
                     .peek()
-                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '-' | '_'))
+                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '-' | '_' | '+' | '*' | '/'))
                 {
                     tmp.push(it.next().unwrap());
                 }

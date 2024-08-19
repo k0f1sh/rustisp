@@ -1,10 +1,12 @@
 use std::fmt;
+use crate::nothing::Nothing;
 
 #[derive(PartialEq, Debug)]
-pub enum Sexp {
+pub enum Sexp<T = Nothing> {
     Symbol(String),
     Num(f64),
-    List(Vec<Sexp>),
+    List(Vec<Sexp<T>>),
+    Pure(T), // T の値がない => Sexp::Pure(_) => 存在しえない
 }
 
 macro_rules! slist {
@@ -13,15 +15,33 @@ macro_rules! slist {
     };
 }
 
-impl Sexp {
+impl<T> Sexp<T> {
     pub fn symbol(s: impl Into<String>) -> Self {
         Sexp::Symbol(s.into())
     }
 
-    pub const NIL: Sexp = Sexp::List(Vec::new());
+    pub const NIL: Self = Sexp::List(Vec::new());
+    
+    pub fn map<S>(self, f: impl Fn(T) -> S) -> Sexp<S> {
+        match self {
+            Sexp::Symbol(s) => Sexp::Symbol(s),
+            Sexp::Num(n) => Sexp::Num(n),
+            Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(|s| s.map(|v| f(v))).collect()),
+            Sexp::Pure(value) => Sexp::Pure(f(value)),
+        }
+    }
 }
 
-impl fmt::Display for Sexp {
+impl<T: fmt::Display> Sexp<T> {
+    pub fn to_num(&self) -> Result<f64, String> {
+        match self {
+            Sexp::Num(n) => Ok(*n),
+            _ => Err(format!("expected number, but got {}", self)),
+        }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Sexp<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Sexp::Symbol(s) => write!(f, "{}", s),
@@ -36,19 +56,20 @@ impl fmt::Display for Sexp {
                 }
                 write!(f, ")")
             }
+            Sexp::Pure(value) => write!(f, "{}", value),
         }
     }
 }
 
 #[test]
 fn test_display() {
-    assert_eq!(Sexp::symbol("foo-bar").to_string(), "foo-bar".to_string());
-    assert_eq!(Sexp::Num(123.).to_string(), "123".to_string());
-    assert_eq!(slist![Sexp::symbol("foo-bar")].to_string(), "(foo-bar)");
+    assert_eq!(Sexp::<Nothing>::symbol("foo-bar").to_string(), "foo-bar".to_string());
+    assert_eq!(Sexp::<Nothing>::Num(123.).to_string(), "123".to_string());
+    assert_eq!(slist![Sexp::<Nothing>::symbol("foo-bar")].to_string(), "(foo-bar)");
     assert_eq!(
         slist![
-            Sexp::symbol("foo"),
-            slist![Sexp::symbol("bar"), Sexp::symbol("baz")]
+            Sexp::<Nothing>::symbol("foo"),
+            slist![Sexp::<Nothing>::symbol("bar"), Sexp::<Nothing>::symbol("baz")]
         ]
         .to_string(),
         "(foo (bar baz))"

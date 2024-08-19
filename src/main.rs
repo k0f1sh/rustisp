@@ -1,5 +1,7 @@
 use std::io::Write;
 
+mod nothing;
+
 #[macro_use]
 mod sexp;
 
@@ -7,6 +9,8 @@ mod lexer;
 mod token;
 
 mod parser;
+
+mod eval;
 
 fn main() {
     println!("I'm Rustisp. Your code is BAD");
@@ -24,7 +28,8 @@ fn main() {
         let tokens = lexer::lex(input);
         let sexps = parser::parse(tokens).unwrap();
         for sexp in sexps {
-            println!("{}", sexp);
+            let result = eval::evaluate(&sexp).unwrap();
+            println!("{}", result);
         }
     }
 }
