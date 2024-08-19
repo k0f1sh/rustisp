@@ -17,19 +17,28 @@ fn main() {
 
     // repl
     loop {
-        print!("> ");
-        std::io::stdout().flush().unwrap();
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).unwrap();
-        let input = input.trim();
-        if input.is_empty() {
-            continue;
-        }
-        let tokens = lexer::lex(input);
-        let sexps = parser::parse(tokens).unwrap();
-        for sexp in sexps {
-            let result = eval::evaluate(&sexp).unwrap();
-            println!("{}", result);
+        let input = read();
+        match eval(&input) {
+            Ok(value) => println!("{}", value),
+            Err(err) => eprintln!("Error: {}", err),
         }
     }
+}
+
+fn read() -> String {
+    print!("> ");
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_owned()
+}
+
+fn eval(s: &str) -> Result<sexp::Sexp, String> {
+    let tokens = lexer::lex(s);
+    let sexps = parser::parse(tokens)?;
+    let mut result = sexp::Sexp::NIL;
+    for sexp in sexps {
+        result = eval::evaluate(&sexp)?;
+    }
+    Ok(result)
 }
