@@ -1,7 +1,7 @@
 use std::fmt;
 
 // Kotlinリスペクト
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Nothing {}
 
 impl Nothing {

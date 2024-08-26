@@ -1,7 +1,7 @@
 use std::fmt;
 use crate::nothing::Nothing;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Sexp<T = Nothing> {
     Symbol(String),
     Num(f64),

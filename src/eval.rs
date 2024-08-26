@@ -1,49 +1,80 @@
 
 use crate::sexp::Sexp;
+use crate::env::Env;
 
-// (+ 1 2) => 3
-// (concat "foo" "bar") => "foobar"
-// (open "javascript.java") => FileHandle <- S式じゃねーよハゲ
-// S式の中に値を持てるようにするっていう表現方法
+// (set name value)
+// (begin a b c)
+// name (参照)
 
-// List<T> T型モテる
-// Sexp<T> 
-
-// + - * /
-// (define foo 123)
-// (+ foo bar)
-// (<fun> 123 456)
-
-pub fn evaluate(s: &Sexp) -> Result<Sexp, String> {
+pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
     match s {
-        Sexp::Symbol(_symbol) => Err("not implemented".to_string()),
+        Sexp::Symbol(name) => {
+            env.find(name).ok_or_else(|| format!("Variable not found: {}", name))
+        },
         Sexp::Num(num) => Ok(Sexp::Num(*num)),
         Sexp::List(list) => match list.as_slice() {
             [] => Ok(Sexp::NIL),
             [Sexp::Symbol(f), args @ ..] => {
                 match f.as_str() {
-                    "+" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg)?.to_num()).sum::<Result<f64, _>>()?)),
+                    "+" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg, env)?.to_num()).sum::<Result<f64, _>>()?)),
                     "-" => match args {
                         [] => Err("Expected at least one argument for -".to_string()),
-                        [arg] => Ok(Sexp::Num(- evaluate(arg)?.to_num()?)),
+                        [arg] => Ok(Sexp::Num(- evaluate(arg, env)?.to_num()?)),
                         [arg, argss @ ..] => {
-                            let n = evaluate(arg)?.to_num();
-                            Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? - evaluate(arg)?.to_num()?))?))
+                            let n = evaluate(arg, env)?.to_num();
+                            Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? - evaluate(arg, env)?.to_num()?))?))
                         }
                    }
-                    "*" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg)?.to_num()).product::<Result<f64, _>>()?)),
+                    "*" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg, env)?.to_num()).product::<Result<f64, _>>()?)),
                     "/" => match args {
                        [] => Err("Expected at least one argument for /".to_string()),
-                       [arg] => Ok(Sexp::Num(1. / evaluate(arg)?.to_num()?)),
+                       [arg] => Ok(Sexp::Num(1. / evaluate(arg, env)?.to_num()?)),
                        [arg, argss @ ..] => {
-                           let n = evaluate(arg)?.to_num();
-                           Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? / evaluate(arg)?.to_num()?))?))
+                           let n = evaluate(arg, env)?.to_num();
+                           Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? / evaluate(arg, env)?.to_num()?))?))
                        }
                     }
-                    _ => panic!("Unknown function: {}", f),
+                    "begin" => {
+                        let mut result = Sexp::NIL;
+                        for arg in args {
+                            result = evaluate(arg, env)?;
+                        }
+                        Ok(result)
+                    }
+                    "print" => {
+                        // (set foo 123)
+                        // (print foo) -> 123
+                        // (print bar) -> err
+                        // (print 456) -> 456
+                        for arg in args {
+                            println!("{}", evaluate(arg, env)?);
+                        }
+                        Ok(Sexp::NIL)
+                    }
+                    "if" => {
+                        if let [cond, then, else_] = args {
+                            if evaluate(cond, env)?.to_num()? != 0. { // Boolがない！
+                                evaluate(then, env)
+                            } else {
+                                evaluate(else_, env)
+                            }
+                        } else {
+                            Err("Expected three arguments for if".to_string())
+                        }
+                    }
+                    "set" => {
+                        if let [Sexp::Symbol(name), value] = args {
+                            let value = evaluate(value, env)?;
+                            env.set(name, value);
+                            Ok(Sexp::NIL)
+                        } else {
+                            Err("Expected two arguments for set".to_string())
+                        }
+                    }
+                    _ => Err(format!("Unkown function: {}", f)),
                 }
             }
-            [f, ..] => panic!("Cannot call: {}", f),
+            [f, ..] => Err(format!("Cannot call: {}", f)),
         }
         Sexp::Pure(a) => a.absurd(),
     }
@@ -57,12 +88,11 @@ fn test_evaluate() {
         if s.len() != 1 {
             return Err("Expected one S-expression".to_string());
         }
-        evaluate(&s[0])
+        evaluate(&s[0], &mut Env::new())
     }
 
     assert_eq!(e("()"), Ok(Sexp::NIL));
     assert_eq!(e("123"), Ok(Sexp::Num(123.)));
-    // assert_eq!(e("foo"), Ok(Sexp::Num(123.)));
     assert_eq!(e("(+)"), Ok(Sexp::Num(0.)));
     assert_eq!(e("(+ 1)"), Ok(Sexp::Num(1.)));
     assert_eq!(e("(+ 1 2)"), Ok(Sexp::Num(3.)));
@@ -78,4 +108,14 @@ fn test_evaluate() {
     assert_eq!(e("(/ 6 2)"), Ok(Sexp::Num(3.)));
     assert_eq!(e("(/ 6 2 3)"), Ok(Sexp::Num(1.)));
     assert_eq!(e("(* (+ 1 2) (+ 3 4))"), Ok(Sexp::Num(21.)));
+    assert!(e("foo").is_err());
+    assert!(e("(123)").is_err());
+    assert_eq!(e("(begin)"), Ok(Sexp::NIL));
+    assert_eq!(e("(begin (set foo 123) foo)"), Ok(Sexp::Num(123.)));
+    assert_eq!(e("(begin (set foo 123) (set foo 456) foo)"), Ok(Sexp::Num(456.)));
+    assert_eq!(e("(begin (set foo 123) (set bar 456) (+ foo bar))"), Ok(Sexp::Num(579.)));
+    assert_eq!(e("(begin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"), Ok(Sexp::Num(1904.)));
+    assert_eq!(e("(if 0 1 2)"), Ok(Sexp::Num(2.)));
+    assert_eq!(e("(if 3 1 2)"), Ok(Sexp::Num(1.)));
+    assert_eq!(e("(if (- 1 1) (+ 2 3) (+ 4 5))"), Ok(Sexp::Num(9.)));
 }

@@ -10,15 +10,19 @@ mod token;
 
 mod parser;
 
+mod env;
+
 mod eval;
 
 fn main() {
     println!("I'm Rustisp. Your code is BAD");
 
+    let mut env = env::Env::new();
+
     // repl
     loop {
         let input = read();
-        match eval(&input) {
+        match eval(&input, &mut env) {
             Ok(value) => println!("{}", value),
             Err(err) => eprintln!("Error: {}", err),
         }
@@ -33,12 +37,12 @@ fn read() -> String {
     input.trim().to_owned()
 }
 
-fn eval(s: &str) -> Result<sexp::Sexp, String> {
+fn eval(s: &str, env: &mut env::Env) -> Result<sexp::Sexp, String> {
     let tokens = lexer::lex(s);
     let sexps = parser::parse(tokens)?;
     let mut result = sexp::Sexp::NIL;
     for sexp in sexps {
-        result = eval::evaluate(&sexp)?;
+        result = eval::evaluate(&sexp, env)?;
     }
     Ok(result)
 }
