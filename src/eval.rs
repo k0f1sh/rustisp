@@ -41,19 +41,9 @@ pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
                         }
                         Ok(result)
                     }
-                    "print" => {
-                        // (set foo 123)
-                        // (print foo) -> 123
-                        // (print bar) -> err
-                        // (print 456) -> 456
-                        for arg in args {
-                            println!("{}", evaluate(arg, env)?);
-                        }
-                        Ok(Sexp::NIL)
-                    }
                     "if" => {
                         if let [cond, then, else_] = args {
-                            if evaluate(cond, env)?.to_num()? != 0. { // Boolがない！
+                            if evaluate(cond, env)?.to_num()? != 0. { // Boolがないので、0以外をtrueとする
                                 evaluate(then, env)
                             } else {
                                 evaluate(else_, env)
@@ -69,6 +59,13 @@ pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
                             Ok(Sexp::NIL)
                         } else {
                             Err("Expected two arguments for set".to_string())
+                        }
+                    }
+                    "defined?" => {
+                        if let [Sexp::Symbol(s)] = args {
+                            Ok(Sexp::Num(env.find(s).map(|_| 1.).unwrap_or(0.)))
+                        } else {
+                            Err("Syntax error: expected (defined? symbol)".to_string())  
                         }
                     }
                     _ => Err(format!("Unkown function: {}", f)),
@@ -118,4 +115,6 @@ fn test_evaluate() {
     assert_eq!(e("(if 0 1 2)"), Ok(Sexp::Num(2.)));
     assert_eq!(e("(if 3 1 2)"), Ok(Sexp::Num(1.)));
     assert_eq!(e("(if (- 1 1) (+ 2 3) (+ 4 5))"), Ok(Sexp::Num(9.)));
+    assert_eq!(e("(defined? foo)"), Ok(Sexp::Num(0.)));
+    assert_eq!(e("(begin (set foo 123) (defined? foo))"), Ok(Sexp::Num(1.)));
 }
