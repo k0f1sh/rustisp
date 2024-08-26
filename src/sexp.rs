@@ -9,6 +9,11 @@ pub enum Sexp<T = Nothing> {
     Pure(T), // T の値がない => Sexp::Pure(_) => 存在しえない
 }
 
+// (begin (set foo 123) foo)              => 123
+// (begin (begin (set foo 123) 456) foo)  => 123
+// (begin (lbegin (set foo 123) 456) foo) => error: undefined variable: `foo`
+// (begin (set foo 123) (lbegin (set foo 456)) foo) => 456
+
 macro_rules! slist {
     ($( $e:expr ),*) => {
         Sexp::List(vec![$( $e ),*])
