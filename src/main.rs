@@ -15,7 +15,7 @@ mod env;
 mod eval;
 
 fn main() {
-    println!("I'm Rustisp. Your code is BAD");
+    println!("I'm Rustisp. Your code is SO-SO");
 
     let mut env = env::Env::new();
 
