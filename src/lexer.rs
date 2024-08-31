@@ -19,7 +19,7 @@ pub fn lex(input: &str) -> Vec<Token> {
                 let mut tmp = head.to_string();
                 while it
                     .peek()
-                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '-' | '_' | '+' | '*' | '/' | '?'))
+                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '+' | '*' | '/' | '?'))
                 {
                     tmp.push(it.next().unwrap());
                 }

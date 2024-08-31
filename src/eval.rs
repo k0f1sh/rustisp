@@ -6,7 +6,7 @@ use crate::env::Env;
 // (begin a b c)
 // name (参照)
 
-pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
+pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
     match s {
         Sexp::Symbol(name) => {
             env.find(name).ok_or_else(|| format!("Variable not found: {}", name))
@@ -38,6 +38,14 @@ pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
                         let mut result = Sexp::NIL;
                         for arg in args {
                             result = evaluate(arg, env)?;
+                        }
+                        Ok(result)
+                    }
+                    "lbegin" => {
+                        let mut result = Sexp::NIL;
+                        let env = Env::new(Some(env.clone()));
+                        for arg in args {
+                            result = evaluate(arg, &env)?;
                         }
                         Ok(result)
                     }
@@ -77,7 +85,6 @@ pub fn evaluate(s: &Sexp, env: &mut Env) -> Result<Sexp, String> {
     }
 }
 
-
 #[test]
 fn test_evaluate() {
     fn e(s: &str) -> Result<Sexp, String> {
@@ -85,7 +92,7 @@ fn test_evaluate() {
         if s.len() != 1 {
             return Err("Expected one S-expression".to_string());
         }
-        evaluate(&s[0], &mut Env::new(None))
+        evaluate(&s[0], &Env::new(None))
     }
 
     assert_eq!(e("()"), Ok(Sexp::NIL));
@@ -116,5 +123,12 @@ fn test_evaluate() {
     assert_eq!(e("(if 3 1 2)"), Ok(Sexp::Num(1.)));
     assert_eq!(e("(if (- 1 1) (+ 2 3) (+ 4 5))"), Ok(Sexp::Num(9.)));
     assert_eq!(e("(defined? foo)"), Ok(Sexp::Num(0.)));
-    assert_eq!(e("(begin (set foo 123) (defined? foo))"), Ok(Sexp::Num(1.)));
+    assert_eq!(e("(lbegin)"), Ok(Sexp::NIL));
+    assert_eq!(e("(lbegin (set foo 123) foo)"), Ok(Sexp::Num(123.)));
+    assert_eq!(e("(lbegin (set foo 123) (set foo 456) foo)"), Ok(Sexp::Num(456.)));
+    assert_eq!(e("(lbegin (set foo 123) (set bar 456) (+ foo bar))"), Ok(Sexp::Num(579.)));
+    assert_eq!(e("(lbegin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"), Ok(Sexp::Num(1904.)));
+    assert_eq!(e("(begin (set foo 123) (lbegin (set foo 456) foo))"), Ok(Sexp::Num(456.)));
+    assert_eq!(e("(begin (set foo 123) (lbegin (set foo 456)) foo)"), Ok(Sexp::Num(456.)));
+    assert!(e("(begin (lbegin (set foo 123)) foo)").is_err());
 }

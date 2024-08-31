@@ -22,7 +22,7 @@ fn main() {
     // repl
     loop {
         let input = read();
-        match eval(&input, &mut env) {
+        match eval(&input, &env) {
             Ok(value) => println!("{}", value),
             Err(err) => eprintln!("Error: {}", err),
         }
@@ -37,7 +37,7 @@ fn read() -> String {
     input.trim().to_owned()
 }
 
-fn eval(s: &str, env: &mut env::Env) -> Result<sexp::Sexp, String> {
+fn eval(s: &str, env: &env::Env) -> Result<sexp::Sexp, String> {
     let tokens = lexer::lex(s);
     let sexps = parser::parse(tokens)?;
     let mut result = sexp::Sexp::NIL;
