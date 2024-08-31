@@ -85,7 +85,7 @@ fn test_evaluate() {
         if s.len() != 1 {
             return Err("Expected one S-expression".to_string());
         }
-        evaluate(&s[0], &mut Env::new())
+        evaluate(&s[0], &mut Env::new(None))
     }
 
     assert_eq!(e("()"), Ok(Sexp::NIL));

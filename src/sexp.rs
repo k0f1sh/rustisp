@@ -9,6 +9,12 @@ pub enum Sexp<T = Nothing> {
     Pure(T), // T の値がない => Sexp::Pure(_) => 存在しえない
 }
 
+// 今
+// (begin (begin (set foo 123) foo) foo)
+// -> 環境=グローバルなハッシュテーブルがある
+// -> 今後はlbeginを考えると、そうじゃなくなる
+// 
+
 // (begin (set foo 123) foo)              => 123
 // (begin (begin (set foo 123) 456) foo)  => 123
 // (begin (lbegin (set foo 123) 456) foo) => error: undefined variable: `foo`
