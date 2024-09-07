@@ -1,6 +1,7 @@
+use std::result;
 
-use crate::sexp::Sexp;
 use crate::env::Env;
+use crate::sexp::Sexp;
 
 // (set name value)
 // (begin a b c)
@@ -8,32 +9,44 @@ use crate::env::Env;
 
 pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
     match s {
-        Sexp::Symbol(name) => {
-            env.find(name).ok_or_else(|| format!("Variable not found: {}", name))
-        },
+        Sexp::Symbol(name) => env
+            .find(name)
+            .ok_or_else(|| format!("Variable not found: {}", name)),
         Sexp::Num(num) => Ok(Sexp::Num(*num)),
         Sexp::List(list) => match list.as_slice() {
             [] => Ok(Sexp::NIL),
             [Sexp::Symbol(f), args @ ..] => {
                 match f.as_str() {
-                    "+" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg, env)?.to_num()).sum::<Result<f64, _>>()?)),
+                    "+" => Ok(Sexp::Num(
+                        args.iter()
+                            .map(|arg| evaluate(arg, env)?.to_num())
+                            .sum::<Result<f64, _>>()?,
+                    )),
                     "-" => match args {
                         [] => Err("Expected at least one argument for -".to_string()),
-                        [arg] => Ok(Sexp::Num(- evaluate(arg, env)?.to_num()?)),
+                        [arg] => Ok(Sexp::Num(-evaluate(arg, env)?.to_num()?)),
                         [arg, argss @ ..] => {
                             let n = evaluate(arg, env)?.to_num();
-                            Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? - evaluate(arg, env)?.to_num()?))?))
+                            Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| {
+                                Ok(acc? - evaluate(arg, env)?.to_num()?)
+                            })?))
                         }
-                   }
-                    "*" => Ok(Sexp::Num(args.iter().map(|arg| evaluate(arg, env)?.to_num()).product::<Result<f64, _>>()?)),
+                    },
+                    "*" => Ok(Sexp::Num(
+                        args.iter()
+                            .map(|arg| evaluate(arg, env)?.to_num())
+                            .product::<Result<f64, _>>()?,
+                    )),
                     "/" => match args {
-                       [] => Err("Expected at least one argument for /".to_string()),
-                       [arg] => Ok(Sexp::Num(1. / evaluate(arg, env)?.to_num()?)),
-                       [arg, argss @ ..] => {
-                           let n = evaluate(arg, env)?.to_num();
-                           Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| Ok(acc? / evaluate(arg, env)?.to_num()?))?))
-                       }
-                    }
+                        [] => Err("Expected at least one argument for /".to_string()),
+                        [arg] => Ok(Sexp::Num(1. / evaluate(arg, env)?.to_num()?)),
+                        [arg, argss @ ..] => {
+                            let n = evaluate(arg, env)?.to_num();
+                            Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| {
+                                Ok(acc? / evaluate(arg, env)?.to_num()?)
+                            })?))
+                        }
+                    },
                     "begin" => {
                         let mut result = Sexp::NIL;
                         for arg in args {
@@ -51,7 +64,8 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
                     }
                     "if" => {
                         if let [cond, then, else_] = args {
-                            if evaluate(cond, env)?.to_num()? != 0. { // Boolがないので、0以外をtrueとする
+                            if evaluate(cond, env)?.to_num()? != 0. {
+                                // Boolがないので、0以外をtrueとする
                                 evaluate(then, env)
                             } else {
                                 evaluate(else_, env)
@@ -73,14 +87,61 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
                         if let [Sexp::Symbol(s)] = args {
                             Ok(Sexp::Num(env.find(s).map(|_| 1.).unwrap_or(0.)))
                         } else {
-                            Err("Syntax error: expected (defined? symbol)".to_string())  
+                            Err("Syntax error: expected (defined? symbol)".to_string())
                         }
+                    }
+                    "=" => {
+                        // 数値のみ対応
+                        if let [a, b] = args {
+                            let a = evaluate(a, env)?.to_num()?;
+                            let b = evaluate(b, env)?.to_num()?;
+                            if a == b {
+                                Ok(Sexp::Num(1.))
+                            } else {
+                                Ok(Sexp::Num(0.))
+                            }
+                        } else {
+                            Err("Syntax error: expected (= a b)".to_string())
+                        }
+                    }
+                    "not=" => {
+                        if let [a, b] = args {
+                            let a = evaluate(a, env)?.to_num()?;
+                            let b = evaluate(b, env)?.to_num()?;
+                            if a != b {
+                                Ok(Sexp::Num(1.))
+                            } else {
+                                Ok(Sexp::Num(0.))
+                            }
+                        } else {
+                            Err("Syntax error: expected (= a b)".to_string())
+                        }
+                    }
+                    "while" => {
+                        if let [cond, body] = args {
+                            let mut result = Sexp::NIL;
+                            loop {
+                                if evaluate(cond, env)?.to_num()? == 0. {
+                                    break;
+                                }
+                                result = evaluate(body, env)?;
+                            }
+                            Ok(result)
+                        } else {
+                            Err("Syntax error: expected (while cond body)".to_string())
+                        }
+                    }
+                    "println" => {
+                        for arg in args {
+                            println!("{}", evaluate(arg, env)?);
+                        }
+                        Ok(Sexp::NIL)
                     }
                     _ => Err(format!("Unkown function: {}", f)),
                 }
             }
             [f, ..] => Err(format!("Cannot call: {}", f)),
-        }
+        },
         Sexp::Pure(a) => a.absurd(),
     }
 }
@@ -116,19 +177,52 @@ fn test_evaluate() {
     assert!(e("(123)").is_err());
     assert_eq!(e("(begin)"), Ok(Sexp::NIL));
     assert_eq!(e("(begin (set foo 123) foo)"), Ok(Sexp::Num(123.)));
-    assert_eq!(e("(begin (set foo 123) (set foo 456) foo)"), Ok(Sexp::Num(456.)));
-    assert_eq!(e("(begin (set foo 123) (set bar 456) (+ foo bar))"), Ok(Sexp::Num(579.)));
-    assert_eq!(e("(begin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"), Ok(Sexp::Num(1904.)));
+    assert_eq!(
+        e("(begin (set foo 123) (set foo 456) foo)"),
+        Ok(Sexp::Num(456.))
+    );
+    assert_eq!(
+        e("(begin (set foo 123) (set bar 456) (+ foo bar))"),
+        Ok(Sexp::Num(579.))
+    );
+    assert_eq!(
+        e("(begin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"),
+        Ok(Sexp::Num(1904.))
+    );
     assert_eq!(e("(if 0 1 2)"), Ok(Sexp::Num(2.)));
     assert_eq!(e("(if 3 1 2)"), Ok(Sexp::Num(1.)));
     assert_eq!(e("(if (- 1 1) (+ 2 3) (+ 4 5))"), Ok(Sexp::Num(9.)));
     assert_eq!(e("(defined? foo)"), Ok(Sexp::Num(0.)));
     assert_eq!(e("(lbegin)"), Ok(Sexp::NIL));
     assert_eq!(e("(lbegin (set foo 123) foo)"), Ok(Sexp::Num(123.)));
-    assert_eq!(e("(lbegin (set foo 123) (set foo 456) foo)"), Ok(Sexp::Num(456.)));
-    assert_eq!(e("(lbegin (set foo 123) (set bar 456) (+ foo bar))"), Ok(Sexp::Num(579.)));
-    assert_eq!(e("(lbegin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"), Ok(Sexp::Num(1904.)));
-    assert_eq!(e("(begin (set foo 123) (lbegin (set foo 456) foo))"), Ok(Sexp::Num(456.)));
-    assert_eq!(e("(begin (set foo 123) (lbegin (set foo 456)) foo)"), Ok(Sexp::Num(456.)));
+    assert_eq!(
+        e("(lbegin (set foo 123) (set foo 456) foo)"),
+        Ok(Sexp::Num(456.))
+    );
+    assert_eq!(
+        e("(lbegin (set foo 123) (set bar 456) (+ foo bar))"),
+        Ok(Sexp::Num(579.))
+    );
+    assert_eq!(
+        e("(lbegin (set foo 12) (set foo 34) (set bar 56) (* foo bar))"),
+        Ok(Sexp::Num(1904.))
+    );
+    assert_eq!(
+        e("(begin (set foo 123) (lbegin (set foo 456) foo))"),
+        Ok(Sexp::Num(456.))
+    );
+    assert_eq!(
+        e("(begin (set foo 123) (lbegin (set foo 456)) foo)"),
+        Ok(Sexp::Num(456.))
+    );
     assert!(e("(begin (lbegin (set foo 123)) foo)").is_err());
+    assert_eq!(e("(= 1 1)"), Ok(Sexp::Num(1.)));
+    assert_eq!(e("(= 1 2)"), Ok(Sexp::Num(0.)));
+    assert_eq!(e("(not= 1 1)"), Ok(Sexp::Num(0.)));
+    assert_eq!(e("(not= 1 2)"), Ok(Sexp::Num(1.)));
+    // whileのtest case 書いて
+    assert_eq!(
+        e("(begin (set a 0) (while (not= a 100) (begin (set a (+ a 1)) a)))"),
+        Ok(Sexp::Num(100.))
+    );
 }
