@@ -23,7 +23,14 @@ pub fn lex(input: &str) -> Vec<Token> {
                 {
                     tmp.push(it.next().unwrap());
                 }
-                Token::symbol(tmp)
+                
+                if tmp == "true" {
+                    Token::True
+                } else if tmp == "false" {
+                    Token::False
+                } else {
+                    Token::symbol(tmp)
+                }
             }
             Some(head @ ('0'..='9')) => {
                 let mut tmp = head.to_string();
@@ -66,6 +73,17 @@ fn test_lex() {
             Token::Symbol("bar".to_string()),
             Token::Symbol("baz".to_string()),
             Token::RParen,
+            Token::RParen
+        ]
+    );
+    assert_eq!(
+        lex("(true truely false falsely)"),
+        vec![
+            Token::LParen,
+            Token::True,
+            Token::Symbol("truely".to_string()),
+            Token::False,
+            Token::Symbol("falsely".to_string()),
             Token::RParen
         ]
     );

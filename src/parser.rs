@@ -52,6 +52,14 @@ where
             tokens.next();
             Ok(Sexp::Symbol(s.clone()))
         }
+        Some(Token::True) => {
+            tokens.next();
+            Ok(Sexp::TRUE)
+        }
+        Some(Token::False) => {
+            tokens.next();
+            Ok(Sexp::FALSE)
+        }
         None => Err("Unexpected EOF".to_string()),
     }
 }
@@ -74,6 +82,8 @@ fn test_parse() {
     );
     assert_eq!(p("42"), Ok(vec![Sexp::Num(42.)]));
     assert_eq!(p("foo"), Ok(vec![Sexp::Symbol("foo".to_string())]));
+    assert_eq!(p("true"), Ok(vec![Sexp::Bool(true)]));
+    assert_eq!(p("false"), Ok(vec![Sexp::Bool(false)]));
     assert_eq!(p("())"), Err("Unexpected RParen".to_string()));
     assert_eq!(p("(1 foo"), Err("Expected RParen".to_string()));
 }

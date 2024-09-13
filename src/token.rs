@@ -6,6 +6,8 @@ pub enum Token {
     Num(f64),       // 123.4
     LParen,         // (
     RParen,         // )
+    True,           // Bool(true)
+    False,          // Bool(false)
 }
 
 impl Token {
@@ -21,6 +23,8 @@ impl fmt::Display for Token {
             Token::Num(n) => write!(f, "{}", n),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
+            Token::True => write!(f, "true"),
+            Token::False => write!(f, "false"),
         }
     }
 }
@@ -31,4 +35,6 @@ fn test_display() {
     assert_eq!(Token::Num(123.).to_string(), "123".to_string());
     assert_eq!(Token::LParen.to_string(), "(");
     assert_eq!(Token::RParen.to_string(), ")");
+    assert_eq!(Token::True.to_string(), "true");
+    assert_eq!(Token::False.to_string(), "false");
 }
