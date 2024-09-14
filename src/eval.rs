@@ -8,8 +8,12 @@ pub type Value = Sexp<Native>;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Native {
     EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
-    // Lambda(Vec<String>, Vec<Value>),
+    Closure(Vec<String>, Vec<Sexp>, Env),
 }
+
+// lambda syntax
+// 固定長引数
+// (lambda (x y) (+ x y))
 
 pub mod embedded {
     use super::*;
@@ -98,6 +102,7 @@ impl fmt::Display for Native {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Native::EmbeddedFun(_) => write!(f, "<embedded-fun>"),
+            Native::Closure(_, _, _) => write!(f, "<closure>"),
         }
     }
 }
@@ -118,20 +123,10 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
         Sexp::List(list) => match list.as_slice() {
             [] => Ok(Sexp::NIL),
             [ff @ Sexp::Symbol(f), args @ ..] => match f.as_str() {
-                "begin" => {
-                    let mut result = Sexp::NIL;
-                    for arg in args {
-                        result = evaluate(arg, env)?;
-                    }
-                    Ok(result)
-                }
+                "begin" => evaluate_sequence(args, env),
                 "lbegin" => {
-                    let mut result = Sexp::NIL;
                     let env = Env::new(Some(env.clone()));
-                    for arg in args {
-                        result = evaluate(arg, &env)?;
-                    }
-                    Ok(result)
+                    evaluate_sequence(args, &env)
                 }
                 "if" => {
                     if let [cond, then, else_] = args {
@@ -171,6 +166,21 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                         Err("Syntax error: expected (defined? symbol)".to_string())
                     }
                 }
+                "lambda" => {
+                    if let [Sexp::List(params), body @ ..] = args {
+                        let params = params
+                            .into_iter()
+                            .map(|p| match p {
+                                Sexp::Symbol(s) => Ok(s.clone()),
+                                _ => Err("Syntax error: expected symbol".to_string()),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let body = body.to_vec();
+                        Ok(Sexp::Pure(Native::Closure(params, body, env.clone())))
+                    } else {
+                        Err("Syntax error: expected (lambda (params) body)".to_string())
+                    }
+                }
                 _ => evaluate_call(ff, args, env),
             },
             [f, args @ ..] => evaluate_call(f, args, env),
@@ -188,8 +198,30 @@ fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> 
 
     match f {
         Sexp::Pure(Native::EmbeddedFun(f)) => f(args, env),
+        Sexp::Pure(Native::Closure(params, body, env)) => {
+            if params.len() != args.len() {
+                return Err(format!(
+                    "Argument error: expected {} arguments, but got {}",
+                    params.len(),
+                    args.len()
+                ));
+            }
+            let env = Env::new(Some(env));
+            for (param, arg) in params.iter().zip(args) {
+                env.set(param, arg);
+            }
+            evaluate_sequence(&body, &env)
+        }
         _ => Err("cannot call".to_string()),
     }
+}
+
+fn evaluate_sequence(ss: &[Sexp], env: &Env) -> Result<Value, String> {
+    let mut result = Sexp::NIL;
+    for s in ss {
+        result = evaluate(s, env)?;
+    }
+    Ok(result)
 }
 
 #[test]

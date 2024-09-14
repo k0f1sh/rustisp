@@ -12,6 +12,12 @@ pub struct EnvPayload {
     parent: Option<Env>,
 }
 
+impl PartialEq for Env {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
 impl Env {
     pub fn new(parent: Option<Env>) -> Self {
         let payload = EnvPayload {
