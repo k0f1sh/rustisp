@@ -17,7 +17,8 @@ mod eval;
 fn main() {
     println!("I'm Rustisp. Your code is SO-SO");
 
-    let mut env = env::Env::new(None);
+    let env = env::Env::new(None);
+    eval::embedded::install(&env);
 
     // repl
     loop {

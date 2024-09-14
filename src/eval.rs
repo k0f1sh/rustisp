@@ -1,19 +1,39 @@
 use std::fmt;
 
+use embedded::install;
+
 use crate::env::Env;
+use crate::eval;
 use crate::sexp::Sexp;
 
 pub type Value = Sexp<Native>;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Native {
-    // EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
+    EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
     // Lambda(Vec<String>, Vec<Value>),
+}
+
+pub mod embedded {
+    use super::*;
+    fn add(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        Ok(Sexp::Num(
+            args.iter()
+                .map(|arg| arg.extract_num())
+                .sum::<Result<f64, _>>()?,
+        ))
+    }
+
+    pub fn install(env: &Env) {
+        env.set("+", Sexp::Pure(Native::EmbeddedFun(add)));
+    }
 }
 
 impl fmt::Display for Native {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<native>")
+        match self {
+            Native::EmbeddedFun(_) => write!(f, "<embedded-fun>"),
+        }
     }
 }
 
@@ -32,12 +52,7 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
         Sexp::Bool(value) => Ok(Sexp::Bool(*value)),
         Sexp::List(list) => match list.as_slice() {
             [] => Ok(Sexp::NIL),
-            [Sexp::Symbol(f), args @ ..] => match f.as_str() {
-                "+" => Ok(Sexp::Num(
-                    args.iter()
-                        .map(|arg| evaluate(arg, env)?.extract_num())
-                        .sum::<Result<f64, _>>()?,
-                )),
+            [ff @ Sexp::Symbol(f), args @ ..] => match f.as_str() {
                 "-" => match args {
                     [] => Err("Expected at least one argument for -".to_string()),
                     [arg] => Ok(Sexp::Num(-evaluate(arg, env)?.extract_num()?)),
@@ -140,11 +155,24 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                     }
                     Ok(Sexp::NIL)
                 }
-                _ => Err(format!("Unkown function: {}", f)),
+                _ => evaluate_call(ff, args, env),
             },
-            [f, ..] => Err(format!("Cannot call: {}", f)),
+            [f, args @ ..] => evaluate_call(f, args, env),
         },
         Sexp::Pure(a) => a.absurd(),
+    }
+}
+
+fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> {
+    let f = evaluate(f, env)?;
+    let args = arg_ss
+        .iter()
+        .map(|arg| evaluate(arg, env))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    match f {
+        Sexp::Pure(Native::EmbeddedFun(f)) => f(args, env),
+        _ => Err("cannot call".to_string()),
     }
 }
 
@@ -155,7 +183,9 @@ fn test_evaluate() {
         if s.len() != 1 {
             return Err("Expected one S-expression".to_string());
         }
-        evaluate(&s[0], &Env::new(None))
+        let env = Env::new(None);
+        embedded::install(&env);
+        evaluate(&s[0], &env)
     }
 
     assert_eq!(e("()"), Ok(Sexp::NIL));
