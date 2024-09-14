@@ -1,9 +1,6 @@
 use std::fmt;
 
-use embedded::install;
-
 use crate::env::Env;
-use crate::eval;
 use crate::sexp::Sexp;
 
 pub type Value = Sexp<Native>;
@@ -16,6 +13,7 @@ pub enum Native {
 
 pub mod embedded {
     use super::*;
+
     fn add(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
         Ok(Sexp::Num(
             args.iter()
@@ -24,8 +22,75 @@ pub mod embedded {
         ))
     }
 
+    fn sub(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        match args.as_slice() {
+            [] => Err("Expected at least one argument for -".to_string()),
+            [arg] => Ok(Sexp::Num(-arg.extract_num()?)),
+            [arg, argss @ ..] => {
+                let n = arg.extract_num();
+                Ok(Sexp::Num(
+                    argss
+                        .iter()
+                        .fold(n, |acc, arg| Ok(acc? - arg.extract_num()?))?,
+                ))
+            }
+        }
+    }
+
+    fn mul(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        Ok(Sexp::Num(
+            args.iter()
+                .map(|arg| arg.extract_num())
+                .product::<Result<f64, _>>()?,
+        ))
+    }
+
+    fn div(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        match args.as_slice() {
+            [] => Err("Expected at least one argument for /".to_string()),
+            [arg] => Ok(Sexp::Num(1. / arg.extract_num()?)),
+            [arg, argss @ ..] => {
+                let n = arg.extract_num();
+                Ok(Sexp::Num(
+                    argss
+                        .iter()
+                        .fold(n, |acc, arg| Ok(acc? / arg.extract_num()?))?,
+                ))
+            }
+        }
+    }
+
+    fn eq(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        if let [a, b] = args.as_slice() {
+            Ok(Sexp::Bool(a == b))
+        } else {
+            Err("Argument error: expected (= a b)".to_string())
+        }
+    }
+
+    fn not_eq(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        if let [a, b] = args.as_slice() {
+            Ok(Sexp::Bool(a != b))
+        } else {
+            Err("Argument error: expected (not= a b)".to_string())
+        }
+    }
+
+    fn println(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        for arg in args {
+            println!("{}", arg);
+        }
+        Ok(Sexp::NIL)
+    }
+
     pub fn install(env: &Env) {
         env.set("+", Sexp::Pure(Native::EmbeddedFun(add)));
+        env.set("-", Sexp::Pure(Native::EmbeddedFun(sub)));
+        env.set("*", Sexp::Pure(Native::EmbeddedFun(mul)));
+        env.set("/", Sexp::Pure(Native::EmbeddedFun(div)));
+        env.set("=", Sexp::Pure(Native::EmbeddedFun(eq)));
+        env.set("not=", Sexp::Pure(Native::EmbeddedFun(not_eq)));
+        env.set("println", Sexp::Pure(Native::EmbeddedFun(println)));
     }
 }
 
@@ -53,31 +118,6 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
         Sexp::List(list) => match list.as_slice() {
             [] => Ok(Sexp::NIL),
             [ff @ Sexp::Symbol(f), args @ ..] => match f.as_str() {
-                "-" => match args {
-                    [] => Err("Expected at least one argument for -".to_string()),
-                    [arg] => Ok(Sexp::Num(-evaluate(arg, env)?.extract_num()?)),
-                    [arg, argss @ ..] => {
-                        let n = evaluate(arg, env)?.extract_num();
-                        Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| {
-                            Ok(acc? - evaluate(arg, env)?.extract_num()?)
-                        })?))
-                    }
-                },
-                "*" => Ok(Sexp::Num(
-                    args.iter()
-                        .map(|arg| evaluate(arg, env)?.extract_num())
-                        .product::<Result<f64, _>>()?,
-                )),
-                "/" => match args {
-                    [] => Err("Expected at least one argument for /".to_string()),
-                    [arg] => Ok(Sexp::Num(1. / evaluate(arg, env)?.extract_num()?)),
-                    [arg, argss @ ..] => {
-                        let n = evaluate(arg, env)?.extract_num();
-                        Ok(Sexp::Num(argss.iter().fold(n, |acc, arg| {
-                            Ok(acc? / evaluate(arg, env)?.extract_num()?)
-                        })?))
-                    }
-                },
                 "begin" => {
                     let mut result = Sexp::NIL;
                     for arg in args {
@@ -130,30 +170,6 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                     } else {
                         Err("Syntax error: expected (defined? symbol)".to_string())
                     }
-                }
-                "=" => {
-                    if let [a, b] = args {
-                        let a = evaluate(a, env)?;
-                        let b = evaluate(b, env)?;
-                        Ok(Sexp::Bool(a == b))
-                    } else {
-                        Err("Syntax error: expected (= a b)".to_string())
-                    }
-                }
-                "not=" => {
-                    if let [a, b] = args {
-                        let a = evaluate(a, env)?;
-                        let b = evaluate(b, env)?;
-                        Ok(Sexp::Bool(a != b))
-                    } else {
-                        Err("Syntax error: expected (not= a b)".to_string())
-                    }
-                }
-                "println" => {
-                    for arg in args {
-                        println!("{}", evaluate(arg, env)?);
-                    }
-                    Ok(Sexp::NIL)
                 }
                 _ => evaluate_call(ff, args, env),
             },
@@ -256,4 +272,6 @@ fn test_evaluate() {
         e("(begin (set a 0) (while (not= a 100) (begin (set a (+ a 1))))a)"),
         Ok(Sexp::Num(100.))
     );
+    assert_eq!(e("((if true + -) 3 2)"), Ok(Sexp::Num(5.)));
+    assert_eq!(e("((if false + -) 3 2)"), Ok(Sexp::Num(1.)));
 }
