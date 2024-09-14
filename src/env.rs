@@ -1,4 +1,4 @@
-use crate::sexp::Sexp;
+use crate::eval::Value;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub struct Env {
 
 #[derive(Debug, Clone)]
 pub struct EnvPayload {
-    vars: HashMap<String, Sexp>,
+    vars: HashMap<String, Value>,
     parent: Option<Env>,
 }
 
@@ -27,7 +27,7 @@ impl Env {
     // (begin (begin (set foo 123) 456) foo)  => 123
     // (begin (lbegin (set foo 123) 456) foo) => error: undefined variable: `foo`
     // (begin (set foo 123) (lbegin (set foo 456)) foo) => 456
-    pub fn set(&self, name: &str, mut value: Sexp) {
+    pub fn set(&self, name: &str, mut value: Value) {
         if let Some(ref mut parent) = self.payload.borrow_mut().parent {
             match parent.set_if_defined(name, value) {
                 Some(returned_value) => value = returned_value,
@@ -41,7 +41,7 @@ impl Env {
             .insert(name.to_string(), value);
     }
 
-    fn set_if_defined(&self, name: &str, value: Sexp) -> Option<Sexp> {
+    fn set_if_defined(&self, name: &str, value: Value) -> Option<Value> {
         let mut payload = self.payload.borrow_mut();
         // TODO: HashMap::entry を使う
         if payload.vars.contains_key(name) {
@@ -52,7 +52,7 @@ impl Env {
         }
     }
 
-    pub fn find(&self, name: &str) -> Option<Sexp> {
+    pub fn find(&self, name: &str) -> Option<Value> {
         let payload = self.payload.borrow();
         match payload.vars.get(name) {
             Some(value) => Some(value.clone()),
@@ -63,6 +63,8 @@ impl Env {
 
 #[test]
 fn test_env() {
+    use crate::sexp::Sexp;
+
     let env = Env::new(None);
     assert_eq!(env.find("foo"), None);
     env.set("foo", Sexp::Num(123.));

@@ -1,7 +1,29 @@
+use std::fmt;
+
 use crate::env::Env;
 use crate::sexp::Sexp;
 
-pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
+pub type Value = Sexp<Native>;
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Native {
+    // EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
+    // Lambda(Vec<String>, Vec<Value>),
+}
+
+impl fmt::Display for Native {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<native>")
+    }
+}
+
+// list = (+ 1 2 3)
+// list.as_slice() => [Symbol(f), args @ ..]
+
+// (set hoge +)
+// (hoge 12 34)
+
+pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
     match s {
         Sexp::Symbol(name) => env
             .find(name)
@@ -128,7 +150,7 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Sexp, String> {
 
 #[test]
 fn test_evaluate() {
-    fn e(s: &str) -> Result<Sexp, String> {
+    fn e(s: &str) -> Result<Value, String> {
         let s = crate::parser::parse(crate::lexer::lex(s))?;
         if s.len() != 1 {
             return Err("Expected one S-expression".to_string());

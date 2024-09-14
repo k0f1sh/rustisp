@@ -37,7 +37,7 @@ fn read() -> String {
     input.trim().to_owned()
 }
 
-fn eval(s: &str, env: &env::Env) -> Result<sexp::Sexp, String> {
+fn eval(s: &str, env: &env::Env) -> Result<eval::Value, String> {
     let tokens = lexer::lex(s);
     let sexps = parser::parse(tokens)?;
     let mut result = sexp::Sexp::NIL;
