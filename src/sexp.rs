@@ -28,7 +28,7 @@ macro_rules! slist {
 }
 
 impl<T> Sexp<T> {
-    pub const RESERVED_KEYWORDS: &[&str] = &["true", "false"];
+    pub const RESERVED_KEYWORDS: &'static [&'static str] = &["true", "false"];
 
     pub fn symbol(s: impl Into<String>) -> Self {
         let s = s.into();
