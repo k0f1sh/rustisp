@@ -15,11 +15,11 @@ pub fn lex(input: &str) -> Vec<Token> {
         tokens.push(match it.next() {
             Some('(') => Token::LParen,
             Some(')') => Token::RParen,
-            Some(head @ ('a'..='z' | 'A'..='Z' | '-' | '_' | '+' | '*' | '/' | '?' | '=')) => {
+            Some(head @ ('a'..='z' | 'A'..='Z' | '-' | '_' | '+' | '*' | '/' | '?' | '=' | '<' | '>')) => {
                 let mut tmp = head.to_string();
                 while it
                     .peek()
-                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '+' | '*' | '/' | '?' | '='))
+                    .is_some_and(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '+' | '*' | '/' | '?' | '=' | '<' | '>'))
                 {
                     tmp.push(it.next().unwrap());
                 }

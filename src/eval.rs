@@ -80,6 +80,26 @@ pub mod embedded {
         }
     }
 
+    fn lt(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        if let [a, b] = args.as_slice() {
+            let a = a.extract_num()?;
+            let b = b.extract_num()?;
+            Ok(Sexp::Bool(a < b))
+        } else {
+            Err("Argument error: expected (< a b)".to_string())
+        }
+    }
+
+    fn gt(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
+        if let [a, b] = args.as_slice() {
+            let a = a.extract_num()?;
+            let b = b.extract_num()?;
+            Ok(Sexp::Bool(a > b))
+        } else {
+            Err("Argument error: expected (> a b)".to_string())
+        }
+    }
+
     fn println(args: Vec<Value>, _env: &Env) -> Result<Value, String> {
         for arg in args {
             println!("{}", arg);
@@ -94,6 +114,8 @@ pub mod embedded {
         env.set("/", Sexp::Pure(Native::EmbeddedFun(div)));
         env.set("=", Sexp::Pure(Native::EmbeddedFun(eq)));
         env.set("not=", Sexp::Pure(Native::EmbeddedFun(not_eq)));
+        env.set("<", Sexp::Pure(Native::EmbeddedFun(lt)));
+        env.set(">", Sexp::Pure(Native::EmbeddedFun(gt)));
         env.set("println", Sexp::Pure(Native::EmbeddedFun(println)));
     }
 }
