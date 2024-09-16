@@ -424,4 +424,37 @@ fn test_evaluate() {
     );
     assert_eq!(e("((if true + -) 3 2)"), Ok(Sexp::Num(5.)));
     assert_eq!(e("((if false + -) 3 2)"), Ok(Sexp::Num(1.)));
+    assert_eq!(
+        e("(quote (1 2 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 2 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 (unquote (+ 1 1)) 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 (unquote-splicing (quote (2 3))) 4))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.),
+            Sexp::Num(4.)
+        ]))
+    );
 }
