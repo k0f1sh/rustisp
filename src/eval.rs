@@ -302,7 +302,7 @@ fn evaluate_quasiquote(s: &Sexp, env: &Env) -> Result<QuasiquoteValue, String> {
                             .iter()
                             .map(|s| evaluate_quasiquote(s, env))
                             .collect::<Result<Vec<_>, _>>()?;
-                        Ok(QuasiquoteValue::Value(extract_quasiquote_value(qs)?))
+                        Ok(QuasiquoteValue::Value(expand_quasiquote_value(qs)?))
                     }
                 }
             } else {
@@ -310,14 +310,14 @@ fn evaluate_quasiquote(s: &Sexp, env: &Env) -> Result<QuasiquoteValue, String> {
                     .iter()
                     .map(|s| evaluate_quasiquote(s, env))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(QuasiquoteValue::Value(extract_quasiquote_value(qs)?))
+                Ok(QuasiquoteValue::Value(expand_quasiquote_value(qs)?))
             }
         }
         _ => Ok(QuasiquoteValue::Value(s.clone().into())),
     }
 }
 
-fn extract_quasiquote_value(qs: Vec<QuasiquoteValue>) -> Result<Value, String> {
+fn expand_quasiquote_value(qs: Vec<QuasiquoteValue>) -> Result<Value, String> {
     let mut result = vec![];
     for quasiquote_value in qs {
         match quasiquote_value {
