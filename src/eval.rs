@@ -11,6 +11,19 @@ pub enum Native {
     Closure(Vec<String>, Vec<Sexp>, Env),
 }
 
+// into Sexp -> Value
+impl From<Sexp> for Value {
+    fn from(sexp: Sexp) -> Self {
+        match sexp {
+            Sexp::Symbol(s) => Sexp::Symbol(s),
+            Sexp::Num(n) => Sexp::Num(n),
+            Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(Value::from).collect()),
+            Sexp::Bool(value) => Sexp::Bool(value),
+            _ => panic!("cannot convert to Value"),
+        }
+    }
+}
+
 // lambda syntax
 // 固定長引数
 // (lambda (x y) (+ x y))
@@ -86,7 +99,7 @@ pub mod embedded {
             let b = b.extract_num()?;
             Ok(Sexp::Bool(a < b))
         } else {
-            Err("Argument error: expected (< a b)".to_string())
+            Err("Argument error: expectejkkkkkukjkjkd (< a b)".to_string())
         }
     }
 
@@ -201,6 +214,13 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                         Ok(Sexp::Pure(Native::Closure(params, body, env.clone())))
                     } else {
                         Err("Syntax error: expected (lambda (params) body)".to_string())
+                    }
+                }
+                "quote" => {
+                    if let [sexp] = args {
+                        Ok(sexp.clone().into())
+                    } else {
+                        Err("Syntax error: expected (quote sexp)".to_string())
                     }
                 }
                 _ => evaluate_call(ff, args, env),
