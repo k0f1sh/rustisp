@@ -223,6 +223,17 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                         Err("Syntax error: expected (quote sexp)".to_string())
                     }
                 }
+                "quasiquote" => {
+                    if let [sexp] = args {
+                        evaluate_quasiquote(sexp, env).map(|v| v.into())
+                    } else {
+                        Err("Syntax error: expected (quasiquote sexp)".to_string())
+                    }
+                }
+                "unquote" => Err("unquote should only appear inside quasiquote".to_string()),
+                "unquote-splicing" => {
+                    Err("unquote should only appear inside quasiquote".to_string())
+                }
                 _ => evaluate_call(ff, args, env),
             },
             [f, args @ ..] => evaluate_call(f, args, env),
@@ -256,6 +267,71 @@ fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> 
         }
         _ => Err("cannot call".to_string()),
     }
+}
+
+enum QuasiquoteValue {
+    Value(Value),
+    SplicingValue(Value),
+}
+
+impl Into<Value> for QuasiquoteValue {
+    fn into(self) -> Value {
+        match self {
+            QuasiquoteValue::Value(v) => v,
+            QuasiquoteValue::SplicingValue(v) => v,
+        }
+    }
+}
+
+fn evaluate_quasiquote(s: &Sexp, env: &Env) -> Result<QuasiquoteValue, String> {
+    match s {
+        Sexp::List(list) => {
+            if let [Sexp::Symbol(f), sexp] = list.as_slice() {
+                match f.as_str() {
+                    "unquote" => evaluate(sexp, env).map(QuasiquoteValue::Value),
+                    "unquote-splicing" => {
+                        let evaled = evaluate(sexp, env)?;
+                        if let Sexp::List(list) = evaled {
+                            Ok(QuasiquoteValue::SplicingValue(Sexp::List(list)))
+                        } else {
+                            Err("unquote-splicing should return a list".to_string())
+                        }
+                    }
+                    _ => {
+                        let qs = list
+                            .iter()
+                            .map(|s| evaluate_quasiquote(s, env))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        Ok(QuasiquoteValue::Value(extract_quasiquote_value(qs)?))
+                    }
+                }
+            } else {
+                let qs = list
+                    .iter()
+                    .map(|s| evaluate_quasiquote(s, env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(QuasiquoteValue::Value(extract_quasiquote_value(qs)?))
+            }
+        }
+        _ => Ok(QuasiquoteValue::Value(s.clone().into())),
+    }
+}
+
+fn extract_quasiquote_value(qs: Vec<QuasiquoteValue>) -> Result<Value, String> {
+    let mut result = vec![];
+    for quasiquote_value in qs {
+        match quasiquote_value {
+            QuasiquoteValue::Value(v) => result.push(v),
+            QuasiquoteValue::SplicingValue(v) => {
+                if let Sexp::List(list) = v {
+                    result.extend(list);
+                } else {
+                    return Err("unquote-splicing should return a list".to_string());
+                }
+            }
+        }
+    }
+    Ok(Sexp::List(result))
 }
 
 fn evaluate_sequence(ss: &[Sexp], env: &Env) -> Result<Value, String> {
