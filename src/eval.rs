@@ -9,6 +9,7 @@ pub type Value = Sexp<Native>;
 pub enum Native {
     EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
     Closure(Vec<String>, Vec<Sexp>, Env),
+    Macro(Vec<String>, Vec<Sexp>, Env),
 }
 
 // into Sexp -> Value
@@ -20,6 +21,19 @@ impl From<Sexp> for Value {
             Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(Value::from).collect()),
             Sexp::Bool(value) => Sexp::Bool(value),
             _ => panic!("cannot convert to Value"),
+        }
+    }
+}
+
+// into Value -> Sexp
+impl From<Value> for Sexp {
+    fn from(value: Value) -> Self {
+        match value {
+            Sexp::Symbol(s) => Sexp::Symbol(s),
+            Sexp::Num(n) => Sexp::Num(n),
+            Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(Sexp::from).collect()),
+            Sexp::Bool(value) => Sexp::Bool(value),
+            _ => panic!("cannot convert to Sexp"),
         }
     }
 }
@@ -138,6 +152,7 @@ impl fmt::Display for Native {
         match self {
             Native::EmbeddedFun(_) => write!(f, "<embedded-fun>"),
             Native::Closure(_, _, _) => write!(f, "<closure>"),
+            Native::Macro(_, _, _) => write!(f, "<macro>"),
         }
     }
 }
@@ -234,6 +249,23 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                 "unquote-splicing" => {
                     Err("unquote should only appear inside quasiquote".to_string())
                 }
+                "defmacro" => {
+                    if let [Sexp::Symbol(name), Sexp::List(params), body @ ..] = args {
+                        let params = params
+                            .into_iter()
+                            .map(|p| match p {
+                                Sexp::Symbol(s) => Ok(s.clone()),
+                                _ => Err("Syntax error: expected symbol".to_string()),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let body = body.to_vec();
+                        let value = Sexp::Pure(Native::Macro(params, body, env.clone()));
+                        env.set(name, value);
+                        Ok(Sexp::NIL)
+                    } else {
+                        Err("Syntax error: expected (defmacro name (params) body)".to_string())
+                    }
+                }
                 _ => evaluate_call(ff, args, env),
             },
             [f, args @ ..] => evaluate_call(f, args, env),
@@ -243,7 +275,25 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
 }
 
 fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> {
+    // TODO evaluate_callの中ではなくmacroexpandとかにわたしたい
     let f = evaluate(f, env)?;
+    if let Sexp::Pure(Native::Macro(params, body, env)) = f {
+        if params.len() != arg_ss.len() {
+            return Err(format!(
+                "Argument error: expected {} arguments, but got {}",
+                params.len(),
+                arg_ss.len()
+            ));
+        }
+        let env = Env::new(Some(env));
+        for (param, arg) in params.iter().zip(arg_ss) {
+            let value = arg.clone().into();
+            env.set(param, value);
+        }
+        let expanded = evaluate_sequence(&body, &env)?;
+        return evaluate(&expanded.into(), &env);
+    }
+
     let args = arg_ss
         .iter()
         .map(|arg| evaluate(arg, env))
