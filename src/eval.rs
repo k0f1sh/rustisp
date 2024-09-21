@@ -309,9 +309,8 @@ fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> 
 
     // macro
     if let Sexp::Pure(Native::Macro(params, body, env)) = f {
-        let original_env = env.clone();
-        let expanded = macroexpand(arg_ss, params, body, env)?;
-        return evaluate(&expanded.try_into()?, &original_env);
+        let expanded = macroexpand(arg_ss, params, body, env.clone())?;
+        return evaluate(&expanded.try_into()?, &env);
     }
 
     let args = arg_ss
