@@ -12,28 +12,37 @@ pub enum Native {
     Macro(Vec<String>, Vec<Sexp>, Env),
 }
 
-// into Sexp -> Value
-impl From<Sexp> for Value {
-    fn from(sexp: Sexp) -> Self {
-        match sexp {
-            Sexp::Symbol(s) => Sexp::Symbol(s),
-            Sexp::Num(n) => Sexp::Num(n),
-            Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(Value::from).collect()),
-            Sexp::Bool(value) => Sexp::Bool(value),
-            _ => panic!("cannot convert to Value"),
+impl TryFrom<Sexp> for Value {
+    type Error = String;
+    fn try_from(value: Sexp) -> Result<Self, Self::Error> {
+        match value {
+            Sexp::Symbol(s) => Ok(Sexp::Symbol(s)),
+            Sexp::Num(n) => Ok(Sexp::Num(n)),
+            Sexp::List(sexp) => Ok(Sexp::List(
+                sexp.into_iter()
+                    .map(Value::try_from)
+                    .collect::<Result<_, _>>()?,
+            )),
+            Sexp::Bool(value) => Ok(Sexp::Bool(value)),
+            _ => Err("cannot convert to Value".to_string()),
         }
     }
 }
 
-// into Value -> Sexp
-impl From<Value> for Sexp {
-    fn from(value: Value) -> Self {
+impl TryFrom<Value> for Sexp {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Sexp::Symbol(s) => Sexp::Symbol(s),
-            Sexp::Num(n) => Sexp::Num(n),
-            Sexp::List(sexp) => Sexp::List(sexp.into_iter().map(Sexp::from).collect()),
-            Sexp::Bool(value) => Sexp::Bool(value),
-            _ => panic!("cannot convert to Sexp"),
+            Sexp::Symbol(s) => Ok(Sexp::Symbol(s)),
+            Sexp::Num(n) => Ok(Sexp::Num(n)),
+            Sexp::List(sexp) => Ok(Sexp::List(
+                sexp.into_iter()
+                    .map(Sexp::try_from)
+                    .collect::<Result<_, _>>()?,
+            )),
+            Sexp::Bool(value) => Ok(Sexp::Bool(value)),
+            _ => Err("cannot convert to Sexp".to_string()),
         }
     }
 }
@@ -233,7 +242,7 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                 }
                 "quote" => {
                     if let [sexp] = args {
-                        Ok(sexp.clone().into())
+                        Ok(sexp.clone().try_into()?)
                     } else {
                         Err("Syntax error: expected (quote sexp)".to_string())
                     }
@@ -287,11 +296,11 @@ fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> 
         }
         let env = Env::new(Some(env));
         for (param, arg) in params.iter().zip(arg_ss) {
-            let value = arg.clone().into();
+            let value = arg.clone().try_into()?;
             env.set(param, value);
         }
         let expanded = evaluate_sequence(&body, &env)?;
-        return evaluate(&expanded.into(), &env);
+        return evaluate(&expanded.try_into()?, &env);
     }
 
     let args = arg_ss
@@ -363,7 +372,7 @@ fn evaluate_quasiquote(s: &Sexp, env: &Env) -> Result<QuasiquoteValue, String> {
                 Ok(QuasiquoteValue::Value(expand_quasiquote_value(qs)?))
             }
         }
-        _ => Ok(QuasiquoteValue::Value(s.clone().into())),
+        _ => Ok(QuasiquoteValue::Value(s.clone().try_into()?)),
     }
 }
 
