@@ -283,24 +283,35 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
     }
 }
 
+fn macroexpand(
+    arg_ss: &[Sexp],
+    params: Vec<String>,
+    body: Vec<Sexp>,
+    env: Env,
+) -> Result<Value, String> {
+    if params.len() != arg_ss.len() {
+        return Err(format!(
+            "Argument error: expected {} arguments, but got {}",
+            params.len(),
+            arg_ss.len()
+        ));
+    }
+    let env = Env::new(Some(env));
+    for (param, arg) in params.iter().zip(arg_ss) {
+        let value = arg.clone().try_into()?;
+        env.set(param, value);
+    }
+    evaluate_sequence(&body, &env)
+}
+
 fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> {
-    // TODO evaluate_callの中ではなくmacroexpandとかにわたしたい
     let f = evaluate(f, env)?;
+
+    // macro
     if let Sexp::Pure(Native::Macro(params, body, env)) = f {
-        if params.len() != arg_ss.len() {
-            return Err(format!(
-                "Argument error: expected {} arguments, but got {}",
-                params.len(),
-                arg_ss.len()
-            ));
-        }
-        let env = Env::new(Some(env));
-        for (param, arg) in params.iter().zip(arg_ss) {
-            let value = arg.clone().try_into()?;
-            env.set(param, value);
-        }
-        let expanded = evaluate_sequence(&body, &env)?;
-        return evaluate(&expanded.try_into()?, &env);
+        let original_env = env.clone();
+        let expanded = macroexpand(arg_ss, params, body, env)?;
+        return evaluate(&expanded.try_into()?, &original_env);
     }
 
     let args = arg_ss
