@@ -1,10 +1,16 @@
-# rustisp
+# Hobolisp ("ほぼ" lisp)
 
-ゴール: RustでLispを作る
+A Lisp interpreter written in Rust for learning purposes.
+
+## Features
+
+- Basic Lisp syntax and evaluation
+- REPL (Read-Eval-Print Loop)
+- Core functions like arithmetic operations
+- Local and global variable bindings
+- Closures (lambda functions)
 
 
 # TODO
 
-- ファイルを読み込んで実行
-- 文字列
-- マクロ
+- macro

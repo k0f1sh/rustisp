@@ -15,7 +15,7 @@ mod env;
 mod eval;
 
 fn main() {
-    println!("I'm Rustisp. Your code is SO-SO");
+    println!("I'm Hobolisp. Your code is SO-SO");
 
     let env = env::Env::new(None);
     eval::embedded::install(&env);

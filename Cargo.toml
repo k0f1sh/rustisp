@@ -1,5 +1,5 @@
 [package]
-name = "rustisp"
+name = "hobolisp"
 version = "0.1.0"
 edition = "2021"
 
