@@ -9,6 +9,42 @@ pub type Value = Sexp<Native>;
 pub enum Native {
     EmbeddedFun(fn(args: Vec<Value>, env: &Env) -> Result<Value, String>),
     Closure(Vec<String>, Vec<Sexp>, Env),
+    Macro(Vec<String>, Vec<Sexp>, Env),
+}
+
+impl TryFrom<Sexp> for Value {
+    type Error = String;
+    fn try_from(value: Sexp) -> Result<Self, Self::Error> {
+        match value {
+            Sexp::Symbol(s) => Ok(Sexp::Symbol(s)),
+            Sexp::Num(n) => Ok(Sexp::Num(n)),
+            Sexp::List(sexp) => Ok(Sexp::List(
+                sexp.into_iter()
+                    .map(Value::try_from)
+                    .collect::<Result<_, _>>()?,
+            )),
+            Sexp::Bool(value) => Ok(Sexp::Bool(value)),
+            _ => Err("cannot convert to Value".to_string()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Sexp {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Sexp::Symbol(s) => Ok(Sexp::Symbol(s)),
+            Sexp::Num(n) => Ok(Sexp::Num(n)),
+            Sexp::List(sexp) => Ok(Sexp::List(
+                sexp.into_iter()
+                    .map(Sexp::try_from)
+                    .collect::<Result<_, _>>()?,
+            )),
+            Sexp::Bool(value) => Ok(Sexp::Bool(value)),
+            _ => Err("cannot convert to Sexp".to_string()),
+        }
+    }
 }
 
 // lambda syntax
@@ -125,6 +161,7 @@ impl fmt::Display for Native {
         match self {
             Native::EmbeddedFun(_) => write!(f, "<embedded-fun>"),
             Native::Closure(_, _, _) => write!(f, "<closure>"),
+            Native::Macro(_, _, _) => write!(f, "<macro>"),
         }
     }
 }
@@ -203,6 +240,41 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
                         Err("Syntax error: expected (lambda (params) body)".to_string())
                     }
                 }
+                "quote" => {
+                    if let [sexp] = args {
+                        Ok(sexp.clone().try_into()?)
+                    } else {
+                        Err("Syntax error: expected (quote sexp)".to_string())
+                    }
+                }
+                "quasiquote" => {
+                    if let [sexp] = args {
+                        evaluate_quasiquote(sexp, env).map(|v| v.into())
+                    } else {
+                        Err("Syntax error: expected (quasiquote sexp)".to_string())
+                    }
+                }
+                "unquote" => Err("unquote should only appear inside quasiquote".to_string()),
+                "unquote-splicing" => {
+                    Err("unquote should only appear inside quasiquote".to_string())
+                }
+                "defmacro" => {
+                    if let [Sexp::Symbol(name), Sexp::List(params), body @ ..] = args {
+                        let params = params
+                            .into_iter()
+                            .map(|p| match p {
+                                Sexp::Symbol(s) => Ok(s.clone()),
+                                _ => Err("Syntax error: expected symbol".to_string()),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let body = body.to_vec();
+                        let value = Sexp::Pure(Native::Macro(params, body, env.clone()));
+                        env.set(name, value);
+                        Ok(Sexp::NIL)
+                    } else {
+                        Err("Syntax error: expected (defmacro name (params) body)".to_string())
+                    }
+                }
                 _ => evaluate_call(ff, args, env),
             },
             [f, args @ ..] => evaluate_call(f, args, env),
@@ -211,8 +283,36 @@ pub fn evaluate(s: &Sexp, env: &Env) -> Result<Value, String> {
     }
 }
 
+fn macroexpand(
+    arg_ss: &[Sexp],
+    params: Vec<String>,
+    body: Vec<Sexp>,
+    env: Env,
+) -> Result<Value, String> {
+    if params.len() != arg_ss.len() {
+        return Err(format!(
+            "Argument error: expected {} arguments, but got {}",
+            params.len(),
+            arg_ss.len()
+        ));
+    }
+    let env = Env::new(Some(env));
+    for (param, arg) in params.iter().zip(arg_ss) {
+        let value = arg.clone().try_into()?;
+        env.set(param, value);
+    }
+    evaluate_sequence(&body, &env)
+}
+
 fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> {
     let f = evaluate(f, env)?;
+
+    // macro
+    if let Sexp::Pure(Native::Macro(params, body, env)) = f {
+        let expanded = macroexpand(arg_ss, params, body, env.clone())?;
+        return evaluate(&expanded.try_into()?, &env);
+    }
+
     let args = arg_ss
         .iter()
         .map(|arg| evaluate(arg, env))
@@ -236,6 +336,71 @@ fn evaluate_call(f: &Sexp, arg_ss: &[Sexp], env: &Env) -> Result<Value, String> 
         }
         _ => Err("cannot call".to_string()),
     }
+}
+
+enum QuasiquoteValue {
+    Value(Value),
+    SplicingValue(Value),
+}
+
+impl Into<Value> for QuasiquoteValue {
+    fn into(self) -> Value {
+        match self {
+            QuasiquoteValue::Value(v) => v,
+            QuasiquoteValue::SplicingValue(v) => v,
+        }
+    }
+}
+
+fn evaluate_quasiquote(s: &Sexp, env: &Env) -> Result<QuasiquoteValue, String> {
+    match s {
+        Sexp::List(list) => {
+            if let [Sexp::Symbol(f), sexp] = list.as_slice() {
+                match f.as_str() {
+                    "unquote" => evaluate(sexp, env).map(QuasiquoteValue::Value),
+                    "unquote-splicing" => {
+                        let evaled = evaluate(sexp, env)?;
+                        if let Sexp::List(list) = evaled {
+                            Ok(QuasiquoteValue::SplicingValue(Sexp::List(list)))
+                        } else {
+                            Err("unquote-splicing should return a list".to_string())
+                        }
+                    }
+                    _ => {
+                        let qs = list
+                            .iter()
+                            .map(|s| evaluate_quasiquote(s, env))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        Ok(QuasiquoteValue::Value(expand_quasiquote_value(qs)?))
+                    }
+                }
+            } else {
+                let qs = list
+                    .iter()
+                    .map(|s| evaluate_quasiquote(s, env))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(QuasiquoteValue::Value(expand_quasiquote_value(qs)?))
+            }
+        }
+        _ => Ok(QuasiquoteValue::Value(s.clone().try_into()?)),
+    }
+}
+
+fn expand_quasiquote_value(qs: Vec<QuasiquoteValue>) -> Result<Value, String> {
+    let mut result = vec![];
+    for quasiquote_value in qs {
+        match quasiquote_value {
+            QuasiquoteValue::Value(v) => result.push(v),
+            QuasiquoteValue::SplicingValue(v) => {
+                if let Sexp::List(list) = v {
+                    result.extend(list);
+                } else {
+                    return Err("unquote-splicing should return a list".to_string());
+                }
+            }
+        }
+    }
+    Ok(Sexp::List(result))
 }
 
 fn evaluate_sequence(ss: &[Sexp], env: &Env) -> Result<Value, String> {
@@ -328,4 +493,37 @@ fn test_evaluate() {
     );
     assert_eq!(e("((if true + -) 3 2)"), Ok(Sexp::Num(5.)));
     assert_eq!(e("((if false + -) 3 2)"), Ok(Sexp::Num(1.)));
+    assert_eq!(
+        e("(quote (1 2 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 2 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 (unquote (+ 1 1)) 3))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.)
+        ]))
+    );
+    assert_eq!(
+        e("(quasiquote (1 (unquote-splicing (quote (2 3))) 4))"),
+        Ok(Sexp::List(vec![
+            Sexp::Num(1.),
+            Sexp::Num(2.),
+            Sexp::Num(3.),
+            Sexp::Num(4.)
+        ]))
+    );
 }
