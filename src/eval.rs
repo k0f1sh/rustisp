@@ -122,7 +122,7 @@ pub mod embedded {
             let b = b.extract_num()?;
             Ok(Sexp::Bool(a < b))
         } else {
-            Err("Argument error: expectejkkkkkukjkjkd (< a b)".to_string())
+            Err("Argument error: expected (< a b)".to_string())
         }
     }
 
